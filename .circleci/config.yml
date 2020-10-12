@@ -1,0 +1,150 @@
+
+# Python CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-python/ for more details
+#
+version: 2.1
+commands:
+  early_return_for_forked_pull_requests:
+    description: >-
+      If this build is from a fork, stop executing the current job and return success.
+      This is useful to avoid steps that will fail due to missing credentials.
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              echo "Nothing to do for forked PRs, so marking this step successful"
+              circleci step halt
+            fi
+
+  run-tests:
+    parameters:
+      python_version:
+        default: "3.6"
+        type: string
+    steps:
+      - checkout
+      - restore_cache: # Download and cache dependencies
+          keys:
+            - v1-dependencies-<<parameters.python_version>>-{{ checksum "requirements.txt" }}
+
+      - run:
+          name: install dependencies
+          command: |
+            virtualenv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+            pip install codecov
+            pip install wheel
+
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-<<parameters.python_version>>-{{ checksum "requirements.txt" }}
+
+      - run:
+          name: Create a source distribution
+          command: python setup.py sdist
+
+      - run:
+          name: Create a wheel
+          command: python setup.py bdist_wheel
+
+      - run:
+          name: run tests
+          command: |
+            . venv/bin/activate
+            REDIS_PORT=6379 coverage run test_commands.py
+
+executors:
+  container_versions: # declares a reusable python executor
+    parameters:
+      python_version:
+        description: "python version tag"
+        default: "3.6"
+        type: string
+      redistimeseries_version:
+        default: "edge"
+        type: string
+    docker:
+      - image: circleci/python:<<parameters.python_version>>
+      - image: redislabs/redistimeseries:<<parameters.redistimeseries_version>>
+
+jobs:
+  build:
+    parameters:
+      python_version:
+        default: "3.6"
+        type: string
+      redistimeseries_version:
+        default: "edge"
+        type: string
+    executor:
+      name: container_versions
+      python_version: <<parameters.python_version>>
+      redistimeseries_version: <<parameters.redistimeseries_version>>
+    working_directory: ~/repo
+    steps:
+      - run-tests:
+        python_version: << parameters.python_version >>
+      - run:
+          name: Run Coverage only for Python3.6
+          command: |
+            if [ <<parameters.python_version>> = "3.6" ]; then
+              . venv/bin/activate
+              codecov
+            fi
+      - run:
+          name: mv dist/* to dist-<<parameters.python_version>>
+          command: |
+            mv dist dist-<<parameters.python_version>>
+
+      # Persist the specified paths (dist-<< parameters.python_version >>) into the workspace for use in downstream job. 
+      - persist_to_workspace:
+          # Must be an absolute path, or relative path from working_directory. This is a directory on the container which is 
+          # taken to be the root directory of the workspace.
+          root: ~/repo
+          # Must be relative path from root
+          paths:
+            - dist-<< parameters.python_version >>
+
+workflows:
+  version: 2
+  commit:
+    jobs:
+      - build:
+          matrix:
+            parameters:
+              python_version:
+                - '2.7'
+                - '3.4'
+                - '3.5'
+                - '3.7'
+                - '3.8'
+                - '3.9.0rc2'
+            filters:
+              tags:
+                only: /.*/
+      - build
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - build:
+          matrix:
+            parameters:
+              python_version:
+                - '2.7'
+                - '3.4'
+                - '3.5'
+                - '3.6'
+                - '3.7'
+                - '3.8'
+                - '3.9.0rc2'
