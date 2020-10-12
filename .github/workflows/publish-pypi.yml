@@ -42,9 +42,9 @@ jobs:
       - name: Publish to Test PyPI
         if: github.event_name == 'release'
         run: |
-          twine upload --skip-existing -r testpypi
+          twine upload --skip-existing -r testpypi dist/*
 
       - name: Publish to PyPI
         if: github.event_name == 'release'
         run: |
-          twine upload -r pypi
+          twine upload -r pypi dist/*
