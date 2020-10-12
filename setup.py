@@ -9,7 +9,7 @@ requirements = list(map(str.strip, open("requirements.txt").readlines()))
 
 setup(
     name='test-release-rts-py',
-    version="1.4.6",
+    version="1.4.7",
     description='Test Release for RedisTimeSeries Python Client',
     long_description=read_all("README.md"),
     long_description_content_type='text/markdown',
