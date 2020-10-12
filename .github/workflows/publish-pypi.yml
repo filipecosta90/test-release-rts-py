@@ -17,6 +17,10 @@ jobs:
       - name: Install twine
         run: |
             pip install twine
+      
+      - name: Install wheel
+        run: |
+            pip install wheel
 
       - name: Create a source distribution
         run: |
